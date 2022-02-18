@@ -32,21 +32,23 @@ void IRAM_ATTR TimerEvent()
 }
 
 void setup() {
-  Serial.begin(115200);
-  pinMode(DHTPin, INPUT);
-  dht.begin();
-  // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x64)
-  Motor_Init();
-   // init done
-  display.display();
-  delay(100);
-  display.clearDisplay();
-  display.display();
-  display.setTextSize(1.75);
-  display.setTextColor(WHITE);
+    Serial.begin(115200);
 
-      //	函数名称：timerBegin()
+    pinMode(DHTPin, INPUT);//定义DHT11输入
+    dht.begin();
+    // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x64)
+    Motor_Init();
+    // init done
+    display.display();
+    delay(100);
+    display.clearDisplay();
+    display.display();
+    display.setTextSize(1.75);
+    display.setTextColor(WHITE);
+
+
+        //	函数名称：timerBegin()
     //	函数功能：Timer初始化，分别有三个参数
     //	函数输入：1. 定时器编号（0到3，对应全部4个硬件定时器）
     //			 2. 预分频器数值（ESP32计数器基频为80M，80分频单位是微秒）
@@ -60,7 +62,7 @@ void setup() {
     //			 2. 中断服务函数的函数指针
     //			 3. 表示中断触发类型是边沿（true）还是电平（false）的标志
     //	函数返回：无
-    timerAttachInterrupt(timer, &TimerEvent, true);
+ //   timerAttachInterrupt(timer, &TimerEvent, true);
 
     //	函数名称：timerAlarmWrite()
     //	函数功能：指定触发定时器中断的计数器值，分别有三个参数
@@ -74,54 +76,59 @@ void setup() {
 }
 void loop() {
 
-    PWM_SetDuty(200 * interruptCounter, 200 * interruptCounter);
+//    PWM_SetDuty(200 * interruptCounter, 200 * interruptCounter);
 
-  Humidity = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  Temperature = dht.readTemperature();
-  // Read temperature as Fahrenheit (isFahrenheit = true)
-  Temp_Fahrenheit= dht.readTemperature(true);
+    Humidity = dht.readHumidity();
+    // Read temperature as Celsius (the default)
+    Temperature = dht.readTemperature();
+    // Read temperature as Fahrenheit (isFahrenheit = true)
+    Temp_Fahrenheit= dht.readTemperature(true);
 
-  // Check if any reads failed and exit early (to try again).
-  if (isnan(Humidity) || isnan(Temperature) || isnan(Temp_Fahrenheit)) {
+    if (Humidity > 50 || Temperature >=25){
+        Motor_Control(10, 10);//通过调节占空比调整风扇速度，目前是灯亮度
+        Serial.print("Motor running!\n");
+    }
+
+    // Check if any reads failed and exit early (to try again).
+    if (isnan(Humidity) || isnan(Temperature) || isnan(Temp_Fahrenheit)) {
     Serial.println(F("Failed to read from DHT sensor!"));
     return;
-  }
+    }
 
-  Serial.print(F("Humidity: "));
-  Serial.print(Humidity);
-  Serial.print(F("%  Temperature: "));
-  Serial.print(Temperature);
-  Serial.print(F("°C "));
-  Serial.print(Temp_Fahrenheit);
-  Serial.println(F("°F "));
+    Serial.print(F("Humidity: "));
+    Serial.print(Humidity);
+    Serial.print(F("%  Temperature: "));
+    Serial.print(Temperature);
+    Serial.print(F("°C "));
+    Serial.print(Temp_Fahrenheit);
+    Serial.println(F("°F "));
 
-  display.setCursor(0,0);
-  display.clearDisplay();
+    display.setCursor(0,0);
+    display.clearDisplay();
 
-  display.setTextSize(1);
-  display.setCursor(0,0);
-  display.print("Temperature: ");
-  display.setTextSize(2);
-  display.setCursor(0,10);
-  display.print(Temperature);
-  display.print(" ");
-  display.setTextSize(1);
-  display.cp437(true);
-  display.write(167);
-  display.setTextSize(2);
-  display.print("C");
-  
-  // display humidity
-  display.setTextSize(1);
-  display.setCursor(0, 35);
-  display.print("Humidity: ");
-  display.setTextSize(2);
-  display.setCursor(0, 45);
-  display.print(Humidity);
-  display.print(" %");
-  
-  display.display();
-  delay(1000);
+    display.setTextSize(1);
+    display.setCursor(0,0);
+    display.print("Temperature: ");
+    display.setTextSize(2);
+    display.setCursor(0,10);
+    display.print(Temperature);
+    display.print(" ");
+    display.setTextSize(1);
+    display.cp437(true);
+    display.write(167);
+    display.setTextSize(2);
+    display.print("C");
+
+    // display humidity
+    display.setTextSize(1);
+    display.setCursor(0, 35);
+    display.print("Humidity: ");
+    display.setTextSize(2);
+    display.setCursor(0, 45);
+    display.print(Humidity);
+    display.print(" %");
+
+    display.display();
+    delay(1000);
 
 }
