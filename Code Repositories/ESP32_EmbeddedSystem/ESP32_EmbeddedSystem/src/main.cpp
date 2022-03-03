@@ -1,75 +1,134 @@
-//SCL -- D22, SDA -- D21
-#include "Adafruit_SHT4x.h"
-#include "Arduino.h"
-#include "SSD1306Wire.h" 
-#include "Ticker.h"
-#include "driver/mcpwm.h"
-#include "soc/mcpwm_reg.h"
-#include "soc/mcpwm_struct.h"
+#include <Wire.h>
+#include "DHT.h"
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "Motor.h"
 
-#define GPIO_PWM0A_OUT 19   //Set GPIO 19 as PWM0A
-#define GPIO_PWM0B_OUT 18   //Set GPIO 18 as PWM0B
 
-SSD1306Wire display(0x3c, SDA, SCL);       //实例化OLED显示对象
-Adafruit_SHT4x sht4 = Adafruit_SHT4x();    //实例化SHT4对象
-Ticker tim1;
+Adafruit_SSD1306 display = Adafruit_SSD1306(128, 64, &Wire, -1);
+unsigned long delayTime;
+//OLED: SCL -- D22, SDA -- D21
+// Uncomment one of the lines below for whatever DHT sensor type you're using!
+#define DHTTYPE DHT11 // DHT 11
+//#define DHTTYPE DHT21 // DHT 21 (AM2301)
+//#define DHTTYPE DHT22 // DHT 22 (AM2302), AM2321
+//DHT Sensor;
+uint8_t DHTPin = 23;
+DHT dht(DHTPin, DHTTYPE);
+hw_timer_t *timer = NULL; 
+int interruptCounter = 0;
 
-void TIM1_CallBack();
+float Temperature;
+float Humidity;
+float Temp_Fahrenheit;
 
-void Pwm_Init()
+void IRAM_ATTR TimerEvent()
 {
-	mcpwm_pin_config_t pin_config = {
-		.mcpwm0a_out_num = GPIO_PWM0A_OUT,
-		.mcpwm0b_out_num = GPIO_PWM0B_OUT
-	};
-	mcpwm_set_pin(MCPWM_UNIT_0, &pin_config);
-	mcpwm_config_t pwm_config;
-	pwm_config.frequency = 1000;    //frequency = 1000Hz
-	pwm_config.cmpr_a = 60.0;       //duty cycle of PWMxA = 60.0%
-	pwm_config.cmpr_b = 50.0;       //duty cycle of PWMxb = 50.0%
-	pwm_config.counter_mode = MCPWM_UP_COUNTER;
-	pwm_config.duty_mode = MCPWM_DUTY_MODE_0;
-	mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);   //Configure PWM0A & PWM0B with above settings
+    Serial.println(interruptCounter++);
+    if (interruptCounter > 5)
+    {
+        interruptCounter = 1;
+    }
 }
 
 void setup() {
-  Serial.begin(115200);                      //初始化串口1
-  while (! sht4.begin())                     //初始化SHT4
-  delay(1);
-  sht4.setPrecision(SHT4X_HIGH_PRECISION);
-  sht4.setHeater(SHT4X_NO_HEATER);            //设置SHT4
-  display.init();                           //OLED初始化
-  display.flipScreenVertically();
-  display.setFont(ArialMT_Plain_10);            //设置显示字符的大小
-  Pwm_Init();
-  tim1.attach_ms(5, TIM1_CallBack);     //定时器1中断，5ms一个周期
+    Serial.begin(115200);
+
+    pinMode(DHTPin, INPUT);//定义DHT11输入
+    dht.begin();
+    // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x64)
+    Motor_Init();
+    // init done
+    display.display();
+    delay(100);
+    display.clearDisplay();
+    display.display();
+    display.setTextSize(1.75);
+    display.setTextColor(WHITE);
+
+
+        //	函数名称：timerBegin()
+    //	函数功能：Timer初始化，分别有三个参数
+    //	函数输入：1. 定时器编号（0到3，对应全部4个硬件定时器）
+    //			 2. 预分频器数值（ESP32计数器基频为80M，80分频单位是微秒）
+    //			 3. 计数器向上（true）或向下（false）计数的标志
+    //	函数返回：一个指向 hw_timer_t 结构类型的指针
+    timer = timerBegin(0, 80, true);
+
+    //	函数名称：timerAttachInterrupt()
+    //	函数功能：绑定定时器的中断处理函数，分别有三个参数
+    //	函数输入：1. 指向已初始化定时器的指针（本例子：timer）
+    //			 2. 中断服务函数的函数指针
+    //			 3. 表示中断触发类型是边沿（true）还是电平（false）的标志
+    //	函数返回：无
+ //   timerAttachInterrupt(timer, &TimerEvent, true);
+
+    //	函数名称：timerAlarmWrite()
+    //	函数功能：指定触发定时器中断的计数器值，分别有三个参数
+    //	函数输入：1. 指向已初始化定时器的指针（本例子：timer）
+    //			 2. 第二个参数是触发中断的计数器值（1000000 us -> 1s）
+    //			 3. 定时器在产生中断时是否重新加载的标志
+    //	函数返回：无
+    timerAlarmWrite(timer, 1000000, true);
+    timerAlarmEnable(timer); //	使能定时器
+
 }
+void loop() {
 
+//    PWM_SetDuty(200 * interruptCounter, 200 * interruptCounter);
 
-void loop() 
-{
-  char dis_str[50];
-  sensors_event_t humidity, temp;
-  display.clear();                             //清屏，不清屏会保留上一次显示的内容
-  sht4.getEvent(&humidity, &temp);             //读取SHT4的数据
-  
-  sprintf(dis_str,"temperature:%.2f C",temp.temperature);    
-  display.drawString(0, 0, dis_str);
-  sprintf(dis_str,"humidity:%.2f %%",humidity.relative_humidity);
-  display.drawString(0, 16, dis_str);                   //OLED显示
-  display.display();
+    Humidity = dht.readHumidity();
+    // Read temperature as Celsius (the default)
+    Temperature = dht.readTemperature();
+    // Read temperature as Fahrenheit (isFahrenheit = true)
+    Temp_Fahrenheit= dht.readTemperature(true);
 
-  delay(100);
-}
+    if (Humidity > 50 || Temperature >=25){
+        Motor_Control(10, 10);//通过调节占空比调整风扇速度，目前是灯亮度
+        Serial.print("Motor running!\n");
+    }
 
-unsigned char cnt;
-void TIM1_CallBack()                 //定时器1回调函数
-{
-  cnt++;
-  if(cnt == 200)
-  {
-    cnt = 0;
+    // Check if any reads failed and exit early (to try again).
+    if (isnan(Humidity) || isnan(Temperature) || isnan(Temp_Fahrenheit)) {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+    }
 
-  }
-  
+    Serial.print(F("Humidity: "));
+    Serial.print(Humidity);
+    Serial.print(F("%  Temperature: "));
+    Serial.print(Temperature);
+    Serial.print(F("°C "));
+    Serial.print(Temp_Fahrenheit);
+    Serial.println(F("°F "));
+
+    display.setCursor(0,0);
+    display.clearDisplay();
+
+    display.setTextSize(1);
+    display.setCursor(0,0);
+    display.print("Temperature: ");
+    display.setTextSize(2);
+    display.setCursor(0,10);
+    display.print(Temperature);
+    display.print(" ");
+    display.setTextSize(1);
+    display.cp437(true);
+    display.write(167);
+    display.setTextSize(2);
+    display.print("C");
+
+    // display humidity
+    display.setTextSize(1);
+    display.setCursor(0, 35);
+    display.print("Humidity: ");
+    display.setTextSize(2);
+    display.setCursor(0, 45);
+    display.print(Humidity);
+    display.print(" %");
+
+    display.display();
+    delay(500);
+
 }
